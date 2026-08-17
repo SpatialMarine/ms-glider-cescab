@@ -17,7 +17,7 @@ Greta Jankauskaite <a href="https://orcid.org/0000-0002-2177-6815"><img src="ima
 
 ### Data availability
 
-Input data data/input contains all datasets required for the analysis. Because of size constraints, the acoustic data folder is not included in the repository; it is made publicly available on Zenodo [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20702261.svg)](https://doi.org/10.5281/zenodo.20702261)
+Input folder contains all datasets required for the analysis. Because of size constraints, the acoustic data folder is not included in the repository; it is made publicly available on Zenodo [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20702261.svg)](https://doi.org/10.5281/zenodo.20702261)
 
 ### License
 
