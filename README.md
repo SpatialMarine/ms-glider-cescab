@@ -12,7 +12,6 @@ Greta Jankauskaite <a href="https://orcid.org/0000-0002-2177-6815"><img src="ima
 |----|----|
 | `analysis/cetaceans/01_inter-annotator` | Inter-annotator comparison, creation of the final detection table. |
 | `analysis/cetaceans/02_detection_statistics` | Calculate detection percentages and diel patterns analysis. |
-| `analysis/cetaceans/fig` | R scripts and visualization pipelines for publication-quality figures. |
 | `setup.R` | Environment configuration, package dependencies, and global parameters. |
 
 ### Data availability
