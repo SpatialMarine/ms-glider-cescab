@@ -22,7 +22,7 @@ indir <- file.path(output_dir, "cetaceans/final-annotation-table")
 
 flac_dir <- file.path(input_dir, "1_CESCAB-raw-flac")
 
-outdir <- file.path(output_dir, "cetaceans")
+outdir <- file.path(output_dir, "cetaceans", "detection-stats")
 if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 
 # ------------------------------------------------------------
@@ -154,5 +154,5 @@ detection_files
 # ------------------------------------------------------------
 # 7. Save outputs needed by later scripts
 # ------------------------------------------------------------
-write.csv(files_presAbs, file.path(outdir, "files_presAbs.csv"))
-write.csv(detection_files, file.path(outdir, "det_percentage_summary.csv"), row.names = FALSE)
+write.csv(files_presAbs, file.path(outdir, "file_presence_absence.csv"))
+write.csv(detection_files, file.path(outdir, "detection_percentage_summary.csv"), row.names = FALSE)

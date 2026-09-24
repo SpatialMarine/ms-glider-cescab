@@ -6,7 +6,7 @@
 # Greta Jankauskaite | @gretajan97
 
 # ============================================================
-# 02_diel_statistics.R
+# 02_diel_patterns_statistics.R
 
 # Analyse diel variation in cetacean acoustic presence by assigning each
 # 30-s FLAC file to daytime or nighttime based on local sunrise/sunset times,
@@ -156,4 +156,5 @@ diel_stats
 # ------------------------------------------------------------
 # 9. Save diel statistics
 # ------------------------------------------------------------
-write.csv(diel_stats, file.path(outdir, "diel_statistics.csv"))
+write.csv(diel_stats, file.path(outdir, "diel_patterns_statistics.csv"))
+
