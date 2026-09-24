@@ -12,6 +12,7 @@ Greta Jankauskaite <a href="https://orcid.org/0000-0002-2177-6815"><img src="ima
 |----|----|
 | `analysis/cetaceans/01_inter-annotator` | Inter-annotator comparison, creation of the final detection table. |
 | `analysis/cetaceans/02_detection_statistics` | Calculate detection percentages and diel patterns analysis. |
+| `analysis/noise` | Calculate sound pressure levels (SPL) in the 63 Hz and 125 Hz third-octave bands used to assess shipping noise, and the 8 kHz band used to assess wind-related noise. | |
 | `setup.R` | Environment configuration, package dependencies, and global parameters. |
 
 ### Data availability
