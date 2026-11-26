@@ -1,9 +1,17 @@
 
 # ============================================================
 # Ocean gliders for PAM
+# ============================================================
+
 # Greta Jankauskaite | @gretajan97
+
+# ============================================================
 # glmm.R
-# File-level binomial GLMMs 
+
+# Fit file-level binomial GLMMs to test whether cetacean detections
+# are associated with bathymetry, glider depth, MPA status, and time
+# of day. Compare candidate model forms and export model summaries
+# and predicted detection-probability plots.
 # ============================================================
 
 source("setup.R")
