@@ -2,7 +2,7 @@
 # ============================================================
 # Ocean gliders for PAM
 # Greta Jankauskaite | @gretajan97
-# 08_GLMM_FINAL_depth_forms_wald.R
+# glmm.R
 # File-level binomial GLMMs 
 # ============================================================
 
