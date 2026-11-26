@@ -6,7 +6,7 @@
 # Greta Jankauskaite | @gretajan97
 
 # ============================================================
-# Fig3_diel_patterns_plots.R
+# Fig4_diel_patterns_plots.R
 # ============================================================
 
 source("setup.R")
@@ -23,7 +23,7 @@ if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 # 2. Import file-level presence/absence table
 # ------------------------------------------------------------
 files_presAbs <- read.csv(
-  file.path(indir, "files_presAbs.csv"),
+  file.path(indir, "file_presence_absence.csv"),
   stringsAsFactors = FALSE
 ) %>%
   mutate(
@@ -32,29 +32,29 @@ files_presAbs <- read.csv(
     fileEndUTC   = lubridate::ymd_hms(fileEndUTC,   tz = "UTC")
   )
 
+# Import day/night boundaries derived from deployment-median sunrise and sunset times 
+# calculated using "suncalc" package and rounded to the nearest hour.
+diel_boundaries <- read.csv(
+  file.path(
+    output_dir, "cetaceans", "glm-clean", "scratch", "diel_boundaries.csv"
+  )
+)
+
+day_start <- diel_boundaries$day_start
+night_start <- diel_boundaries$night_start
+
 # ------------------------------------------------------------
-# 3. Convert UTC timestamps to Madrid local time
+# 3. Convert recording midpoints from UTC to local time
 # ------------------------------------------------------------
 files_presAbs <- files_presAbs %>%
   mutate(
-    fileStartLocal = lubridate::with_tz(
-      fileStartUTC,
+    fileMidUTC = fileStartUTC + (fileEndUTC - fileStartUTC) / 2,
+    fileMidLocal = lubridate::with_tz(
+      fileMidUTC,
       tzone = "Europe/Madrid"
     ),
-    hourLocal = lubridate::hour(fileStartLocal)
+    hourLocal = lubridate::hour(fileMidLocal)
   )
-
-# ------------------------------------------------------------
-# 3.1. Check
-# ------------------------------------------------------------
-stopifnot(
-  inherits(files_presAbs$fileStartUTC, "POSIXct"),
-  identical(attr(files_presAbs$fileStartUTC, "tzone"), "UTC"),
-  identical(
-    attr(files_presAbs$fileStartLocal, "tzone"),
-    "Europe/Madrid"
-  )
-)
 
 # ------------------------------------------------------------
 # 4. Calculate hourly recording effort
@@ -114,50 +114,6 @@ plot_data <- detected_hour %>%
                   levels = sprintf("%02d", 0:23))
   )
 
-# ------------------------------------------------------------
-# 6. Plot Delphinidae diel detections
-# ------------------------------------------------------------
-delphinidae_p <- ggplot(
-  filter(plot_data, group == "Delphinidae"),
-  aes(x = hour, y = percentage)
-) +
-  annotate("rect", xmin = 22, xmax = 25,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
-  annotate("rect", xmin = 0, xmax = 8,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
-  geom_bar(stat = "identity", fill = "#E16462FF", alpha = 0.9) +
-  labs(
-    x = "Hour of day (local time)",
-    y = "Percentage of data with target signals"
-  ) +
-  scale_x_discrete(
-    drop = FALSE,
-    expand = c(0, 0),
-    breaks = sprintf("%02d", seq(0, 23, by = 2))
-  ) +
-  scale_y_continuous(
-    limits = c(0, 40) # standardize scale for Figure 5
-  ) +
-  theme_bw(base_size = 14) +
-  theme(
-    axis.title = element_text(size = 15),
-    axis.text = element_text(size = 14, color = "gray20"),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_blank(),
-    axis.line = element_line(color = "gray40"),
-    legend.position = "none"
-  )
-
-delphinidae_p
-
-ggsave(
-  file.path(outdir, "delphinidae_diel.png"),
-  delphinidae_p,
-  width = 7,
-  height = 6,
-  dpi = 300
-)
 
 # ------------------------------------------------------------
 # 7. Plot sperm whale diel detections
@@ -166,13 +122,21 @@ sperm_wh_p <- ggplot(
   filter(plot_data, group == "Physeter macrocephalus"),
   aes(x = hour, y = percentage)
 ) +
-  annotate("rect", xmin = 22, xmax = 25,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
-  annotate("rect", xmin = 0, xmax = 8,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
+  annotate(
+    "rect",
+    xmin = 0, xmax = day_start + 1,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
+  annotate(
+    "rect",
+    xmin = night_start + 1, xmax = 25,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
   geom_bar(stat = "identity", fill = "#FCA636FF", alpha = 0.9) +
   labs(
-    x = "Hour of day (local time)",
+    x = "Hour of day",
     y = "Percentage of data with target signals"
   ) +
   scale_x_discrete(
@@ -181,7 +145,8 @@ sperm_wh_p <- ggplot(
     breaks = sprintf("%02d", seq(0, 23, by = 2))
   ) +
   scale_y_continuous(
-    limits = c(0, 40) # standardize scale for Figure 5
+    limits = c(0, 35),
+    breaks = seq(0, 35, by = 5)
   ) +
   theme_bw(base_size = 14) +
   theme(
@@ -194,7 +159,6 @@ sperm_wh_p <- ggplot(
     legend.position = "none"
   )
 
-sperm_wh_p
 
 ggsave(
   file.path(outdir, "sp_wh_diel.png"),
@@ -250,13 +214,21 @@ click_p <- ggplot(
   filter(plot_data_signalType, signalType == "clicks"),
   aes(x = hour, y = percentage)
 ) +
-  annotate("rect", xmin = 22, xmax = 25,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
-  annotate("rect", xmin = 0, xmax = 8,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
+  annotate(
+    "rect",
+    xmin = 0, xmax = day_start + 1,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
+  annotate(
+    "rect",
+    xmin = night_start + 1, xmax = 25,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
   geom_bar(stat = "identity", fill = "#7D2D3F", alpha = 0.9) +
   labs(
-    x = "Hour of day (local time)",
+    x = "Hour of day",
     y = "Percentage of data with target signals"
   ) +
   scale_x_discrete(
@@ -265,7 +237,8 @@ click_p <- ggplot(
     breaks = sprintf("%02d", seq(0, 23, by = 2))
   ) +
   scale_y_continuous(
-    limits = c(0, 40) # standardize scale for Figure 5
+    limits = c(0, 35),
+    breaks = seq(0, 35, by = 5) # standardise for figure
   ) +
   theme_bw(base_size = 14) +
   theme(
@@ -278,7 +251,6 @@ click_p <- ggplot(
     legend.position = "none"
   )
 
-click_p
 
 ggsave(
   file.path(outdir, "click_diel.png"),
@@ -295,13 +267,21 @@ whistle_p <- ggplot(
   filter(plot_data_signalType, signalType == "whistles"),
   aes(x = hour, y = percentage)
 ) +
-  annotate("rect", xmin = 22, xmax = 25,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
-  annotate("rect", xmin = 0, xmax = 8,
-           ymin = -Inf, ymax = Inf, fill = "grey90", alpha = 0.7) +
+  annotate(
+    "rect",
+    xmin = 0, xmax = day_start + 1,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
+  annotate(
+    "rect",
+    xmin = night_start + 1, xmax = 25,
+    ymin = -Inf, ymax = Inf,
+    fill = "grey90", alpha = 0.7
+  ) +
   geom_bar(stat = "identity", fill = "#E8B2A3", alpha = 0.9) +
   labs(
-    x = "Hour of day (local time)",
+    x = "Hour of day",
     y = "Percentage of data with target signals"
   ) +
   scale_x_discrete(
@@ -310,7 +290,8 @@ whistle_p <- ggplot(
     breaks = sprintf("%02d", seq(0, 23, by = 2))
   ) +
   scale_y_continuous(
-    limits = c(0, 40) # standardize scale for Figure 5
+    limits = c(0, 35),
+    breaks = seq(0, 35, by = 5)
   ) +
   theme_bw(base_size = 14) +
   theme(
@@ -323,7 +304,6 @@ whistle_p <- ggplot(
     legend.position = "none"
   )
 
-whistle_p
 
 ggsave(
   file.path(outdir, "whistles_diel.png"),

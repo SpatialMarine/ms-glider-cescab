@@ -22,7 +22,7 @@ pacman::p_load(
   "fuzzyjoin", "R.matlab", "irr",
 
   # plotting and visualisation
-  "ggspatial", "scico", "viridis", "tidyterra",
+  "ggspatial", "scico", "viridis", "tidyterra", "rnaturalearth",
   "RColorBrewer", "egg", "scales", "png", "grid", "suncalc",
 
   install = FALSE # change to TRUE
@@ -69,3 +69,4 @@ study_area <- st_as_sfc(
 )
 
 study_area <- st_as_sf(study_area)
+

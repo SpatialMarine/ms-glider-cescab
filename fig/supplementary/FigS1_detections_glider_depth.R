@@ -1,3 +1,4 @@
+
 # ============================================================
 # Ocean gliders for PAM
 # ============================================================
@@ -6,47 +7,42 @@
 # FigS1_detections_glider_depth.R
 # ============================================================
 
-# Plot the glider dive profile with SELECTION-LEVEL cetacean
-# detections.
-#
-# Annotations spanning multiple files are clipped to the actual
-# 30 s FLAC recording windows. Therefore, duty-cycle gaps are
-# not shown as detections.
-#
-# Glider depth is interpolated at the exact beginning and end
-# of each recorded selection interval so that short annotations
-# are retained even if no NetCDF timestamp falls inside them.
+# Plot the glider dive profile with file-level cetacean presence.
+# One point per species present in each 30-s recording.
 
 source("setup.R")
-
 
 # ------------------------------------------------------------
 # 1. Define paths
 # ------------------------------------------------------------
 
-flac_dir <- file.path(input_dir, "1_CESCAB-raw-flac")
-nc_dir   <- file.path(input_dir, "glider_data")
-
-indir <- file.path(output_dir, "cetaceans", "final-annotation-table")
+indir <- file.path(output_dir, "cetaceans", "detection-stats")
+nc_dir <- file.path(input_dir, "glider_data")
 
 outdir <- file.path(output_dir, "cetaceans", "fig")
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 
 # ------------------------------------------------------------
-# 2. Import final selection table
+# 2. Import file-level presence/absence table
 # ------------------------------------------------------------
 
-annotations <- read.delim(
-  file.path(indir, "2_CESCAB-annotation-table.txt"),
-  stringsAsFactors = FALSE,
-  check.names = FALSE
-)
+files_presAbs <- read.csv(
+  file.path(indir, "file_presence_absence.csv"),
+  stringsAsFactors = FALSE
+) %>%
+  select(-any_of("X")) %>%
+  mutate(
+    fileStartUTC = ymd_hms(fileStartUTC, tz = "UTC"),
+    fileEndUTC = ymd_hms(fileEndUTC, tz = "UTC"),
+    fileMidUTC = fileStartUTC + (fileEndUTC - fileStartUTC) / 2
+  ) %>%
+  arrange(fileStartUTC)
 
 
 # ------------------------------------------------------------
 # 3. Import glider track and depth profile
-# ------------------------------------------------------------´
+# ------------------------------------------------------------
 
 nc_file <- file.path(
   nc_dir,
@@ -73,322 +69,384 @@ track <- track %>%
   ) %>%
   filter(
     !is.na(time),
-    !is.na(depth),
     is.finite(depth)
   ) %>%
   distinct(time, .keep_all = TRUE) %>%
   arrange(time)
 
-stopifnot(
-  inherits(track$time, "POSIXct"),
-  identical(attr(track$time, "tzone"), "UTC")
-)
-
 
 # ------------------------------------------------------------
-# 4. Create complete screened FLAC file list
+# 4. Match closest depth to each recording midpoint
 # ------------------------------------------------------------
 
-flacs <- tibble(
-  file = list.files(
-    flac_dir,
-    pattern = "\\.flac$",
-    full.names = FALSE,
-    ignore.case = TRUE
+nearest_value <- function(time, value, target) {
+  
+  ok <- is.finite(as.numeric(time)) & is.finite(value)
+  
+  x <- as.numeric(time[ok])
+  y <- value[ok]
+  q <- as.numeric(target)
+  
+  ans <- rep(NA_real_, length(q))
+  
+  if (!length(x)) return(ans)
+  
+  valid <- which(is.finite(q))
+  i <- findInterval(q[valid], x)
+  
+  before <- pmax(i, 1L)
+  after <- pmin(i + 1L, length(x))
+  
+  nearest <- ifelse(
+    abs(q[valid] - x[before]) <= abs(q[valid] - x[after]),
+    before,
+    after
   )
-) %>%
-  mutate(
-    fileStartUTC = ymd_hms(
-      str_remove(
-        str_extract(file, "CESCAB_\\d{8}_\\d{6}"),
-        "^CESCAB_"
-      ),
-      tz = "UTC"
-    ),
-    fileEndUTC = fileStartUTC + seconds(30)
-  ) %>%
-  filter(!is.na(fileStartUTC)) %>%
-  distinct(file, .keep_all = TRUE) %>%
-  arrange(fileStartUTC)
-
-stopifnot(
-  inherits(flacs$fileStartUTC, "POSIXct"),
-  identical(attr(flacs$fileStartUTC, "tzone"), "UTC")
-)
-
-
-# ------------------------------------------------------------
-# 5. Prepare selection-level detection intervals
-# ------------------------------------------------------------
-
-detection_intervals <- annotations %>%
-  mutate(
-    original_selection_id = row_number(),
-    
-    detStartUTC = parse_date_time(
-      `Begin Date Time`,
-      orders = c(
-        "ymd HMS",
-        "ymd HMSOS",
-        "ymd IMS",
-        "ymd IMSOS"
-      ),
-      tz = "UTC"
-    ),
-    
-    detEndUTC = parse_date_time(
-      paste(`End Date`, `End Clock Time`),
-      orders = c(
-        "ymd HMS",
-        "ymd HMSOS",
-        "ymd IMS",
-        "ymd IMSOS"
-      ),
-      tz = "UTC"
-    )
-  ) %>%
-  transmute(
-    original_selection_id,
-    species = Species,
-    signalType = `Signal Type`,
-    detStartUTC,
-    detEndUTC
-  ) %>%
-  filter(
-    !is.na(species),
-    !is.na(detStartUTC),
-    !is.na(detEndUTC),
-    detEndUTC > detStartUTC
-  )
-
-
-# ------------------------------------------------------------
-# 6. Clip annotations to actual FLAC windows
-# ------------------------------------------------------------
-
-detection_intervals_recorded <- flacs %>%
-  left_join(
-    detection_intervals,
-    join_by(
-      fileStartUTC < detEndUTC,
-      fileEndUTC > detStartUTC
-    ),
-    relationship = "many-to-many"
-  ) %>%
-  filter(!is.na(species)) %>%
-  mutate(
-    detStartRecordedUTC = pmax(fileStartUTC, detStartUTC),
-    detEndRecordedUTC   = pmin(fileEndUTC, detEndUTC)
-  ) %>%
-  filter(detEndRecordedUTC > detStartRecordedUTC) %>%
-  arrange(original_selection_id, detStartRecordedUTC) %>%
-  mutate(recorded_interval_id = row_number()) %>%
-  select(
-    recorded_interval_id,
-    original_selection_id,
-    file,
-    species,
-    signalType,
-    detStartRecordedUTC,
-    detEndRecordedUTC
-  )
-
-
-# ------------------------------------------------------------
-# 7. Interpolate depth at selection boundaries
-# ------------------------------------------------------------
-
-track_time_numeric <- as.numeric(track$time)
-
-interpolate_depth <- function(datetime) {
-  approx(
-    x = track_time_numeric,
-    y = track$depth,
-    xout = as.numeric(datetime),
-    rule = 1
-  )$y
+  
+  ans[valid] <- y[nearest]
+  
+  ans
 }
 
-selection_segments <- lapply(
-  seq_len(nrow(detection_intervals_recorded)),
-  function(i) {
-    
-    interval <- detection_intervals_recorded[i, ]
-    
-    start_time <- interval$detStartRecordedUTC
-    end_time   <- interval$detEndRecordedUTC
-    
-    start_depth <- interpolate_depth(start_time)
-    end_depth   <- interpolate_depth(end_time)
-    
-    if (is.na(start_depth) || is.na(end_depth)) return(NULL)
-    
-    internal_track <- track %>%
-      filter(
-        time > start_time,
-        time < end_time
-      ) %>%
-      select(time, depth)
-    
-    bind_rows(
-      tibble(
-        time = start_time,
-        depth = start_depth
-      ),
-      internal_track,
-      tibble(
-        time = end_time,
-        depth = end_depth
-      )
-    ) %>%
-      arrange(time) %>%
-      mutate(
-        recorded_interval_id = interval$recorded_interval_id,
-        original_selection_id = interval$original_selection_id,
-        species = interval$species,
-        signalType = interval$signalType,
-        file = interval$file
-      )
-  }
-) %>%
-  bind_rows()
-
-
-# ------------------------------------------------------------
-# 8. Define species colours
-# ------------------------------------------------------------
-
-species_colors <- c(
-  "Delphinidae" = "#E16462FF",
-  "Grampus griseus" = "#A9C46C",
-  "Physeter macrocephalus" = "#FCA636FF"
+files_presAbs$depth <- nearest_value(
+  track$time,
+  track$depth,
+  files_presAbs$fileMidUTC
 )
 
 
 # ------------------------------------------------------------
-# 9. Plot glider depth profile with detections
+# 5. Prepare file-level detection points
 # ------------------------------------------------------------
 
-glider_depth_detections <- ggplot() +
-  
-  geom_line(
-    data = track,
-    aes(
-      x = time,
-      y = depth
-    ),
-    colour = "grey22",
-    linewidth = 0.55,
-    lineend = "round"
-  ) +
-  
-  geom_line(
-    data = selection_segments,
-    aes(
-      x = time,
-      y = depth,
-      colour = species,
-      group = recorded_interval_id
-    ),
-    linewidth = 2.5,
-    lineend = "round"
-  ) +
-  
-  scale_colour_manual(
-    values = species_colors,
-    name = "Species",
-    na.translate = FALSE
-  ) +
-  
-  scale_x_datetime(
-    timezone = "UTC",
-    breaks = seq(
-      as.POSIXct("2024-08-02 00:00:00", tz = "UTC"),
-      max(track$time),
-      by = "3 days"
-    ),
-    date_labels = "%m/%d",
-    expand = expansion(mult = c(0.03, 0.03))
-  ) +
-  
-  coord_cartesian(
-    xlim = c(
-      as.POSIXct("2024-08-02 00:00:00", tz = "UTC"),
-      max(track$time)
+# Keep Delphinidae and Grampus separate, as in the original plot.
+detection_points <- files_presAbs %>%
+  select(
+    file,
+    fileMidUTC,
+    depth,
+    pres_Del,
+    pres_Gg,
+    pres_Pm
+  ) %>%
+  pivot_longer(
+    cols = c(pres_Del, pres_Gg, pres_Pm),
+    names_to = "species",
+    values_to = "presence"
+  ) %>%
+  filter(
+    presence == 1,
+    !is.na(fileMidUTC),
+    is.finite(depth)
+  ) %>%
+  mutate(
+    species = factor(
+      species,
+      levels = c("pres_Del", "pres_Gg", "pres_Pm"),
+      labels = c(
+        "Delphinidae",
+        "Grampus griseus",
+        "Physeter macrocephalus"
+      )
     )
-  ) +
-  
-  scale_y_continuous(
-    breaks = seq(-1000, 0, by = 200),
-    expand = expansion(mult = c(0.02, 0.02))
-  ) +
-  
-  labs(
-    x = "Date (UTC)",
-    y = "Glider depth (m)"
-  ) +
-  
-  theme_bw(base_size = 16) +
-  
+  ) %>%
+  distinct(file, species, .keep_all = TRUE)
+
+
+
+# ------------------------------------------------------------
+# 7. Prepare depth data for both plots
+# ------------------------------------------------------------
+
+# Combine unidentified delphinid and Risso's dolphin signals.
+# Each recording counts once per signal group.
+# Preserve missing values rather than treating them as absences.
+
+depth_data <- files_presAbs %>%
+  transmute(
+    file,
+    depth_m = abs(depth),
+    sperm_clicks = as.logical(pres_Pm),
+    delphinid_clicks = as.logical(del_clicks) |
+      as.logical(Gg_clicks),
+    delphinid_whistles = as.logical(del_whistles) |
+      as.logical(Gg_whistles)
+  ) %>%
+  filter(
+    is.finite(depth_m),
+    between(depth_m, 0, 1000)
+  ) %>%
+  pivot_longer(
+    cols = c(
+      sperm_clicks,
+      delphinid_clicks,
+      delphinid_whistles
+    ),
+    names_to = "group",
+    values_to = "presence"
+  ) %>%
+  mutate(presence = as.integer(presence)) %>%
+  filter(!is.na(presence)) %>%
+  mutate(
+    group = factor(
+      group,
+      levels = c(
+        "delphinid_clicks",
+        "delphinid_whistles",
+        "sperm_clicks"
+      ),
+      labels = c(
+        "Delphinid echolocation clicks",
+        "Delphinid whistles",
+        "Sperm whale echolocation clicks"
+      )
+    ),
+    presabs = factor(
+      presence,
+      levels = c(0, 1),
+      labels = c("Absent", "Present")
+    )
+  ) %>%
+  distinct(file, group, .keep_all = TRUE)
+
+depth_colours <- c(
+  "Sperm whale echolocation clicks" = "#FCA636FF",
+  "Delphinid echolocation clicks" = "#7D2D3F",
+  "Delphinid whistles" = "#E8B2A3"
+)
+
+depth_theme <- theme_bw(base_size = 13) +
   theme(
+    aspect.ratio = 1,
     panel.grid = element_blank(),
-    
-    axis.title.x = element_text(
-      size = 16,
-      margin = margin(t = 7)
+    panel.spacing = grid::unit(1, "lines"),
+    strip.background = element_rect(
+      fill = "grey95",
+      colour = "grey65"
     ),
-    
-    axis.title.y = element_text(
-      size = 16,
-      margin = margin(r = 7)
-    ),
-    
-    axis.text.x = element_text(
-      angle = 0,
-      hjust = 0.5,
-      size = 16
-    ),
-    
-    axis.text.y = element_text(
-      size = 16
-    ),
-    
-    axis.ticks = element_line(
-      color = "black",
-      linewidth = 0.4
-    ),
-    
-    axis.ticks.length = unit(0.08, "cm"),
-    
+    strip.text = element_text(size = 12),
+    axis.text = element_text(colour = "gray20"),
     legend.position = "bottom",
-    
-    legend.title = element_text(
-      face = "bold", 
-      size = 16
+    legend.title = element_blank(),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+
+# ------------------------------------------------------------
+# 8. Density plots: presence versus absence
+# ------------------------------------------------------------
+
+# Plot absence curves in grey and presence curves in group colours.
+# Density is normalised separately for each curve.
+# Use a common smoothing bandwidth of 50 m.
+
+depth_density <- ggplot() +
+  geom_density(
+    data = filter(depth_data, presence == 0),
+    aes(
+      x = depth_m,
+      fill = "Absent",
+      colour = "Absent"
     ),
-    
-    legend.text = element_text(
-      size = 16
+    alpha = 0.4,
+    linewidth = 0.6,
+    bw = 50,
+    trim = TRUE
+  ) +
+  geom_density(
+    data = filter(depth_data, presence == 1),
+    aes(
+      x = depth_m,
+      fill = group,
+      colour = group
     ),
-    
-    plot.margin = margin(
-      20, 40, 20, 20
+    alpha = 0.5,
+    linewidth = 0.6,
+    bw = 50,
+    trim = TRUE
+  ) +
+  facet_wrap(
+    ~ group,
+    nrow = 1,
+    scales = "free_y",
+    labeller = label_wrap_gen(width = 24)
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Absent" = "grey65",
+      depth_colours
+    ),
+    breaks = "Absent"
+  ) +
+  scale_colour_manual(
+    values = c(
+      "Absent" = "grey65",
+      depth_colours
+    ),
+    breaks = "Absent"
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 1000, by = 200),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  coord_cartesian(xlim = c(0, 1000)) +
+  scale_y_continuous(
+    limits = c(0, NA),
+    breaks = scales::breaks_pretty(n = 4),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  labs(
+    x = "Glider depth (m)",
+    y = "Density",
+    caption = "Coloured curves: present; grey curves: absent."
+  ) +
+  depth_theme +
+  theme(
+    legend.position = "none",
+    plot.caption = element_text(
+      hjust = 0.5,
+      size = 11,
+      margin = margin(t = 10)
     )
   )
 
-#glider_depth_detections
+print(depth_density)
 
+
+# ------------------------------------------------------------
+# 9. Calculate detection percentages in 100 m depth bins
+# ------------------------------------------------------------
+
+depth_breaks <- seq(0, 1000, by = 100)
+
+depth_labels <- paste0(
+  head(depth_breaks, -1),
+  "–",
+  tail(depth_breaks, -1)
+)
+
+# Bins are [0,100), [100,200), etc.
+# The final bin is 900–1000 m and includes exactly 1000 m.
+
+depth_binned <- depth_data %>%
+  mutate(
+    bin_id = findInterval(
+      depth_m,
+      depth_breaks,
+      rightmost.closed = TRUE
+    ),
+    depth_bin = factor(
+      depth_labels[bin_id],
+      levels = depth_labels
+    )
+  ) %>%
+  group_by(group, depth_bin, .drop = FALSE) %>%
+  summarise(
+    n_recordings = n(),
+    n_detections = sum(presence == 1),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    detection_pct = if_else(
+      n_recordings > 0,
+      100 * n_detections / n_recordings,
+      NA_real_
+    )
+  )
+
+
+# ------------------------------------------------------------
+# 10. Combined depth-percentage figure
+# ------------------------------------------------------------
+
+depth_binned <- depth_binned %>%
+  mutate(
+    group = factor(
+      group,
+      levels = c(
+        "Delphinid echolocation clicks",
+        "Delphinid whistles",
+        "Sperm whale echolocation clicks"
+      )
+    )
+  )
+
+depth_percentage <- ggplot(
+  depth_binned,
+  aes(
+    x = depth_bin,
+    y = detection_pct,
+    fill = group
+  )
+) +
+  geom_col(
+    width = 0.9,
+    alpha = 0.9,
+    na.rm = TRUE
+  ) +
+  facet_wrap(
+    ~ group,
+    nrow = 1,
+    scales = "fixed",
+    axes = "all_y",
+    axis.labels = "all_y"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Delphinid echolocation clicks" = "#7D2D3F",
+      "Delphinid whistles" = "#E8B2A3",
+      "Sperm whale echolocation clicks" = "#FCA636FF"
+    ),
+    guide = "none"
+  ) +
+  scale_x_discrete(
+    drop = FALSE,
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 20),
+    breaks = seq(0, 20, by = 5),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  labs(
+    x = "Glider depth (m)",
+    y = "Percentage of data with target signals"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    aspect.ratio = 1,
+    axis.title = element_text(size = 15),
+    axis.text = element_text(
+      size = 14,
+      colour = "gray20"
+    ),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    axis.line = element_line(colour = "gray40"),
+    panel.spacing = grid::unit(1.5, "lines"),
+    strip.text = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "none"
+  )
+
+#print(depth_percentage)
+
+
+# ------------------------------------------------------------
+# 11. Save combined figure
+# ------------------------------------------------------------
 
 ggsave(
-  filename = file.path(
-    outdir,
-    "detections-glider-depth.png"
-  ),
-  plot = glider_depth_detections,
-  width = 40,
-  height = 14,
-  units = "cm",
+  file.path(outdir, "detections-glider-depth-percentage-100m.png"),
+  plot = depth_percentage,
+  width = 15,
+  height = 6,
+  units = "in",
   dpi = 300,
   bg = "white"
 )
-

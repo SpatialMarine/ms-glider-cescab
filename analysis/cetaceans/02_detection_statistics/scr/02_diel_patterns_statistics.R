@@ -27,7 +27,7 @@ if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 # 2. Import file-level presence/absence table
 # ------------------------------------------------------------
 files_presAbs <- read.csv(
-  file.path(indir, "files_presAbs.csv"),
+  file.path(indir, "file-presence-absence.csv"),
   stringsAsFactors = FALSE
 ) %>%
   mutate(

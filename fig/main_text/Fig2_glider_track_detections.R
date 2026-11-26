@@ -6,7 +6,7 @@
 # Greta Jankauskaite | @gretajan97
 
 # ============================================================
-# 01_glider_track_detection_plots.R
+# Fig2_glider_track_detections.R
 #
 # Assign selection-level cetacean detections to the glider track and
 # map their spatial distribution. annotations spanning multiple FLAC
@@ -225,14 +225,6 @@ cont_int_1000 <- st_intersection(
   study_area
 )
 
-# World boundaries
-w_file <- paste0(
-  carto_dir,
-  "/world_boundaries_shp/world.shp"
-)
-
-world <- st_read(w_file)
-
 # Spain boundaries
 s_file <- paste0(
   carto_dir,
@@ -244,7 +236,7 @@ spain <- st_read(s_file)
 # Cabrera Archipelago National Park
 mpa_file <- paste0(
   carto_dir,
-  "/MPA/pn_cabrera.gpkg"
+  "/MPA/Limite_Archipielago_Cabrera.shp"
 )
 
 cabrera_MPA <- st_read(mpa_file)
@@ -364,7 +356,7 @@ map_phy <- base_map +
     shape = 21
   )
 
-map_phy
+#map_phy
 
 ggsave(
   filename = file.path(outdir, "CESCAB_track_phy_det.png"),
@@ -418,7 +410,7 @@ map_del_gra <- base_map +
     shape = 21
   )
 
-map_del_gra
+#map_del_gra
 
 ggsave(
   filename = file.path(outdir, "CESCAB_track_del_gra_det.png"),
@@ -427,3 +419,4 @@ ggsave(
   height = 11,
   dpi = 300
 )
+
